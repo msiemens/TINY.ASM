@@ -21,15 +21,15 @@ else:
 # CONSTANTS
 ###############################################################################
 
-# WORD_SIZE = 8
-# MAX_INT = 2 ** WORD_SIZE
-# MEMORY_SIZE = 2 ** WORD_SIZE
-# RAND_MAX = 2 ** WORD_SIZE - 1
-
-WORD_SIZE = 32
+WORD_SIZE = 8
 MAX_INT = 2 ** WORD_SIZE
-MEMORY_SIZE = 256
-RAND_MAX = 255
+MEMORY_SIZE = 2 ** WORD_SIZE
+RAND_MAX = 25
+
+# WORD_SIZE = 32
+# MAX_INT = 2 ** WORD_SIZE
+# MEMORY_SIZE = 256
+# RAND_MAX = 255
 
 
 ###############################################################################
@@ -50,7 +50,7 @@ def init():
 # SMALL HELPERS
 ###############################################################################
 
-# Convert an int to uint8
+# Convert an int to uint8, ensuring it's not larger than WORD_SIZE
 to_uint = lambda i: i % MAX_INT
 
 # Check, if the given string represents an address
@@ -196,8 +196,8 @@ def run(asm):
             instr_pointer += 1 + num_args
 
         # print
-    print
-    print 'Exited after {} ticks in {:.5}s'.format(ticks, timer() - start)
+    # print
+    # print 'Exited after {} ticks in {:.5}s'.format(ticks, timer() - start)
 
     return output.getvalue()
 
