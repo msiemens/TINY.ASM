@@ -5,6 +5,7 @@
 #include <cstdio>
 
 using namespace std;
+
 typedef unsigned int uint;
 
 // 32bit
@@ -24,7 +25,7 @@ const int mantissa_length = 10;
 // */
 
 const int bias = pow(2, exponent_length - 1) - 1;
-unsigned int bs_1_l[bits];
+
 
 std::string ui2b(unsigned int uint8)
 {
@@ -32,31 +33,16 @@ std::string ui2b(unsigned int uint8)
     return "0b" + n.to_string();
 }
 
-
-float mantissa2dec(int mantissa) {
-    float m = 1, h = 1;
-
-    for (int i = 0; i < mantissa_length; ++i)
-    {
-        h *= 0.5;
-        m += h * ((mantissa & (1 << (mantissa_length - 1))) != 0);
-        mantissa <<= 1;
-    }
-
-    return m;
-}
-
+// ---------------------------------------------------------------------
+// Int to float
+// ---------------------------------------------------------------------
 
 uint8 get_exponent(uint8 v)
 {
     unsigned int r = 0;
 
-    //*
     while (v >>= 1)
-    {
-      r++;
-    }
-    // */
+        {   r++;   }
 
     return bias + r;
 }
@@ -66,7 +52,7 @@ uint8 get_mantissa(uint8 v, uint8 exponent)
 {
     std::cout << "Calculating mantissa of " << ui2b(v) << std::endl;
     // Remove highest bit → hidden bit
-    v &= ~(bs_1_l[exponent - bias]);
+    v &= ~(1 << exponent);
     std::cout << "Removing highest bit:   " << ui2b(v) << std::endl;
 
 
@@ -115,9 +101,6 @@ void int2ieee754(int i) {
     int ieee754 = composite_ieee754(exponent, mantissa);
     std::cout << "IEEE754:  " << ui2b(ieee754) << std::endl;
 
-    // std::cout << "Result: " << mantissa2dec(mantissa) << " * 2 ^ " << exponent - bias << std::endl;
-    // printf( "        %f\n", ldexp(mantissa2dec(mantissa), exponent - bias));
-
     std::cout << "-----------------------------------------------------" << std::endl;
     std::cout << i << ": " << ui2b(ieee754) << " (0x" << std::hex << ieee754 << ")" << std::endl;
     std::cout << "-----------------------------------------------------" << std::endl << std::endl << std::endl;
@@ -126,15 +109,8 @@ void int2ieee754(int i) {
 
 int main(int argc, char const *argv[])
 {
-    for (int i = 0; i < bits; ++i)
-    {
-        bs_1_l[i] = pow(2, i);
-    }
-
     for (int i = 1; i <= 255; ++i)
-    {
-        int2ieee754(i);
-    }
+        {   int2ieee754(i);   }
 
     return 0;
 }
