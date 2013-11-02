@@ -17,6 +17,14 @@ else:
     ADDRESS = args.address
     LITERAL = args.literal
 
+
+################################################################################
+# EXCEPTIONS
+###############################################################################
+
+class VirtualRuntimeError(Exception):
+    pass
+
 ###############################################################################
 # CONSTANTS
 ###############################################################################
@@ -85,7 +93,7 @@ def mem_store(dest, arg):
 def instr_jump(dest):
     """ Move the instruction pointer to dest. """
     global instr_pointer, jumping
-    # print 'JUMPING from {} to {}'.format(instr_pointer, to)
+    # print 'JUMPING from {} to {}'.format(instr_pointer, dest)
     instr_pointer = dest
     jumping = True
 
@@ -118,7 +126,7 @@ def instruction_jump_conditional(cmp):
     def operation(x, a, b):
         assert_address(a)
         if cmp(get_value(a), get_value(b)):
-            instr_jump(x)
+            instr_jump(get_value(x))
 
     return operation
 
@@ -146,7 +154,7 @@ instructions = {
     'HALT': halt,
     'APRINT': lambda a: instruction_print(chr(int(get_value(a)))),
     'DPRINT': lambda a: instruction_print(int(get_value(a))),
-    'DEBUG': lambda: None
+    'AREAD': lambda m: mem_store(m, ord(sys.stdin.read(1)))
 }
 
 
@@ -154,7 +162,7 @@ instructions = {
 # MAIN LOOP
 ###############################################################################
 
-def run(asm):
+def run(asm, testing=False):
     init()
     import assembler
     start = timer()
@@ -164,15 +172,24 @@ def run(asm):
     tokens = tokens.split()
 
     while running:
+        if instr_pointer >= len(tokens):
+            msg = 'FATAL ERROR: Code did not terminate properly!'
+            print msg
+
+            if testing:
+                raise VirtualRuntimeError(msg)
+
+            halt()
+
         jumping = False
-        # print 'Ticks:', ticks
-        # ctx_pre = ' '.join(tokens[instr_pointer - 5:instr_pointer])
-        # ctx_post = ' '.join(tokens[instr_pointer + 1:instr_pointer + 6])
-        # print 'Ctx:', ctx_pre, ':::', tokens[instr_pointer], ':::', ctx_post
-        # print 'Pointer:', instr_pointer
-        # print 'Memory:', memory
+        #print 'Ticks:', ticks
+        #ctx_pre = ' '.join(tokens[instr_pointer - 5:instr_pointer])
+        #ctx_post = ' '.join(tokens[instr_pointer + 1:instr_pointer + 6])
+        #print 'Ctx:', ctx_pre, ':::', tokens[instr_pointer], ':::', ctx_post
+        #print 'Pointer:', instr_pointer
+        #print 'Memory:', memory
         opcode = tokens[instr_pointer]
-        # print 'Instruction:', opcode
+        #print 'Instruction:', opcode
 
         # Look up number of arguments
         num_args = len(assembler.instructions[opcode].values()[0])

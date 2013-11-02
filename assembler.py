@@ -17,6 +17,50 @@ else:
     literal = args.literal
 
 
+###############################################################################
+# EXCEPTIONS
+###############################################################################
+
+class AssemblerException(Exception):
+    pass
+
+
+class AssemblerSyntaxError(AssemblerException):
+    pass
+
+
+class AssemblerNameError(AssemblerException):
+    pass
+
+
+class NoSuchConstantError(AssemblerException):
+    def __init__(self, name):
+        self.name = name
+
+    def __str__(self):
+        return 'FATAL ERROR - No such constant: ' + self.name
+
+
+class RedefinitionWarning(Warning, AssemblerNameError):
+    def __init__(self, name):
+        self.name = name
+
+    def __str__(self):
+        return 'WARNING - Redefinition of $' + self.name
+
+
+class RedefinitionError(Warning, AssemblerNameError):
+    def __init__(self, name):
+        self.name = name
+
+    def __str__(self):
+        return 'FATAL ERROR - Redefinition of $' + self.name
+
+
+###############################################################################
+# THE INSTRUCTION DEFINITIONS
+###############################################################################
+
 instructions = {
     'AND': {
         # M[a] = M[a] bit-wise and M[b]
@@ -112,7 +156,7 @@ instructions = {
     },
     'APRINT': {
         # Print the contents of M[a] in ASCII
-        # # opcode | a:
+        # opcode | a:
         '0x20': (address,),
         '0x21': (literal,)
     },
@@ -122,12 +166,18 @@ instructions = {
         '0x22': (address,),
         '0x23': (literal,)
     },
-    'DEBUG': {
-        # For the VM
-        'no opcode': tuple()
+    'AREAD': {
+        # Custom opcode:
+        # Read one char from stdin and store the ASCII value at M[a]
+        # opcode | a
+        '0x24': (address,)
     }
 }
 
+
+###############################################################################
+# THE PREPROCESSORS
+###############################################################################
 
 def neighborhood(iterable):
     """
@@ -136,9 +186,9 @@ def neighborhood(iterable):
     iterator = iter(iterable)
     item = iterator.next()  # throws StopIteration if empty.
 
-    for next in iterator:
-        yield (item, next)
-        item = next
+    for _next in iterator:
+        yield (item, _next)
+        item = _next
 
     yield (item, None)
 
@@ -154,10 +204,10 @@ def preprocessor_include(lines):
         line = lines.pop(0).strip()
 
         if line.startswith('#include'):
-            filename = line.split('#include')[1].strip()
-            if not filename in included:
-                lines[0:0] = open(filename).readlines()
-                included.add(filename)
+            path = line.split('#include')[1].strip()
+            if not path in included:
+                lines[0:0] = open(path).readlines()
+                included.add(path)
         else:
             yield line
 
@@ -199,19 +249,23 @@ def preprocessor_constants(lines):
                     value = iterator.next()
 
                     if value == '[_]':
-                        assert auto_mem < MEMORY_SIZE, 'No memory left!'
+                        if auto_mem >= MEMORY_SIZE:
+                            raise AssemblerException(
+                                'FATAL ERROR - [_]: No memory left!'
+                            )
+
                         constants[const_name] = '[' + str(auto_mem) + ']'
                         auto_mem += 1
                     else:
                         if const_name in constants:
-                            print 'WARNING: Redefinition of $' + const_name
+                            raise RedefinitionWarning(const_name)
                         constants[const_name] = value
                 else:
                     # Found usage of constant, replace with stored value
                     try:
                         tokens.append(constants[const_name])
                     except KeyError:
-                        raise SyntaxError('No such constant: ' + const_name)
+                        raise NoSuchConstantError(const_name)
             else:
                 # Uninteresting token
                 tokens.append(token)
@@ -240,7 +294,7 @@ def preprocessor_labels(lines):
             # Label definition
             label = token[:-1]
             if label in labels:
-                raise SyntaxError('Redefinition of ' + label + ':')
+                raise NoSuchConstantError('Redefinition of ' + label + ':')
             labels[label] = index - len(labels)
 
     # Pass 2: Update references
@@ -253,7 +307,7 @@ def preprocessor_labels(lines):
                 try:
                     instruction_no = labels[label_name]
                 except KeyError:
-                    raise SyntaxError('No such label: ' + label_name)
+                    raise RedefinitionError('No such label: ' + label_name)
                 tokens.append(str(instruction_no))
             elif token[-1] == ':':
                 # Remove label definitions
@@ -286,6 +340,10 @@ def preprocessor_chars(lines):
         yield ' '.join(tokens)
 
 
+###############################################################################
+# The main function
+###############################################################################
+
 def assembler_to_hex(assembler_code, preprocessor_only=False):
     """
     Convert a assembler program to `Tiny` machine code.
@@ -307,7 +365,7 @@ def assembler_to_hex(assembler_code, preprocessor_only=False):
                      preprocessor_constants, preprocessor_labels,
                      preprocessor_chars)
     for pp in preprocessors:
-        lines = pp(lines)
+        lines = list(pp(lines))
 
     if preprocessor_only:
         return '\n'.join(lines)
@@ -340,8 +398,11 @@ def assembler_to_hex(assembler_code, preprocessor_only=False):
                 if opcode_args == tuple(arg_types):
                     opcode = _opcode
 
-            assert opcode, 'Unknown argument types for instruction {} and ' \
-                           'given arguments {}'.format(instruction, arg_types)
+            if opcode is None:
+                raise AssemblerSyntaxError(
+                    'Unknown argument types for instruction {} and '
+                    'given arguments {}'.format(instruction, arg_types)
+                )
 
             # Convert arguments to hex
             # 1. Strip '[ ]'
@@ -349,7 +410,8 @@ def assembler_to_hex(assembler_code, preprocessor_only=False):
             # 3. Make ints
             arg_list = [int(arg) for arg in arg_list]
             # 4. Make hex
-            #    Note: Using hex() would result in 0x1 instead of 0x01
+            # Use % operator, because using hex() would result in 0x1 instead
+            # of 0x01
             arg_list = ['0x' + ('%02X' % arg).upper() for arg in arg_list]
 
             # Create opcode string and store it
@@ -364,4 +426,10 @@ if __name__ == '__main__':
     import sys
     pp_only = sys.argv[1] == '--pp-only'
     filename = sys.argv[1] if not pp_only else sys.argv[2]
-    print assembler_to_hex(open(filename).read(), preprocessor_only=pp_only)
+
+    try:
+        print assembler_to_hex(open(filename).read(), preprocessor_only=pp_only)
+    except Warning as w:
+        print w
+    except AssemblerException as e:
+        print e
