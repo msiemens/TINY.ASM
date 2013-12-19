@@ -16,6 +16,16 @@ else:
     address = args.address
     literal = args.literal
 
+DEBUG = False
+
+
+def debug(*args):
+    """
+    Debug output
+    """
+    if DEBUG:
+        print ('{} ' * len(args)).format(*args)
+
 
 ###############################################################################
 # EXCEPTIONS
@@ -197,18 +207,25 @@ def preprocessor_include(lines):
     """
     Process include directives.
     """
+    # TODO: What about nested includes?
+    # TODO: What about recursive includes?
+    # TODO: Add syntax example
     lines = list(lines)
-    included = set()
+    included = set()  # Files we already included
 
     while lines:
+        # Take the first line from the stack
         line = lines.pop(0).strip()
 
         if line.startswith('#include'):
             path = line.split('#include')[1].strip()
+
             if not path in included:
+                # Put the new contents to the top of the stack
                 lines[0:0] = open(path).readlines()
                 included.add(path)
         else:
+            # No includes to process, yield the line
             yield line
 
 
@@ -216,12 +233,17 @@ def preprocessor_comments(lines, separator=';'):
     """
     Remove all comments from the source code.
     """
+    # TODO: Add syntax example
     for line in lines:
         line = line.strip()
+
+        # Line comment, skip to next one
         if line and line[0] == ';':
             continue
 
+        # Remove trailing comment
         line = line.split(separator)[0].strip()
+
         if line:
             yield line
 
@@ -230,13 +252,16 @@ def preprocessor_constants(lines):
     """
     Replaces constants usage with the defined vaule.
     """
+    # TODO: Simplify
+    # TODO: Add syntax example
+
     constants = {}
     auto_mem = 0
 
     for lineno, line in enumerate(lines):
         tokens = []
         iterator = iter(line.split())
-        assignment_line = False
+        is_assignment_line = False
 
         # Process all tokens in this line
         for token, next_token in neighborhood(iterator):
@@ -245,10 +270,11 @@ def preprocessor_constants(lines):
 
                 if next_token == '=':
                     # Found assignment, store the associated value
-                    assignment_line = True
+                    is_assignment_line = True
                     value = iterator.next()
 
                     if value == '[_]':
+                        # Process auto increment memory
                         if auto_mem >= MEMORY_SIZE:
                             raise AssemblerException(
                                 'FATAL ERROR - [_]: No memory left!'
@@ -256,35 +282,47 @@ def preprocessor_constants(lines):
 
                         constants[const_name] = '[' + str(auto_mem) + ']'
                         auto_mem += 1
+
                     else:
+                        # Usual constant
                         if const_name in constants:
                             raise RedefinitionWarning(const_name)
+
                         constants[const_name] = value
+
                 else:
                     # Found usage of constant, replace with stored value
                     try:
                         tokens.append(constants[const_name])
                     except KeyError:
                         raise NoSuchConstantError(const_name)
+
             else:
                 # Uninteresting token
                 tokens.append(token)
 
-        # Skip assignment lines, yield other lines
-        if not assignment_line:
-            # print 'Constants:', constants
+        # Yield line if it's not an assignment
+        if not is_assignment_line:
+            debug('Constants:', constants)
             yield ' '.join(tokens)
 
 
 def preprocessor_labels(lines):
     """
     Replace labels with the referenced instruction number.
+
+    Example:
+
+        label:
+        GOTO :label
+
     """
     lines = list(lines)
     tokens = []
     labels = {}
 
     # Split up lines to one big list of tokens
+    # TODO: Shorten to list comprehension
     for line in lines:
         tokens.extend(line.split())
 
@@ -293,8 +331,10 @@ def preprocessor_labels(lines):
         if token[-1] == ':':
             # Label definition
             label = token[:-1]
+
             if label in labels:
                 raise NoSuchConstantError('Redefinition of ' + label + ':')
+
             labels[label] = index - len(labels)
 
     # Pass 2: Update references
@@ -302,39 +342,66 @@ def preprocessor_labels(lines):
         tokens = []
 
         for token in line.split():
+
+            # Label usage
             if token[0] == ':':
                 label_name = token[1:]
+
                 try:
                     instruction_no = labels[label_name]
                 except KeyError:
                     raise RedefinitionError('No such label: ' + label_name)
+
                 tokens.append(str(instruction_no))
+
+            # Label definitions
             elif token[-1] == ':':
-                # Remove label definitions
+                # Skip
                 continue
+
             else:
                 tokens.append(token)
 
         if tokens:
-            # print 'Labels:', labels
+            debug('Labels:', labels)
             yield ' '.join(tokens)
 
 
 def preprocessor_chars(lines):
+    """
+    Preprocess char constants.
+
+    Example:
+
+        APRINT 'A'
+        APRINT '!'
+
+    Results in:
+
+        APRINT 65
+        APRINT 33
+    """
+
     def char_to_int(c):
+        """
+        Convert a char constant to the ASCII integer
+        """
         if len(c) == 4 and c[1] == '\\':
-            # Special character. Use eval to transform '\\n' to '\n'
+            # Special character! Use eval to transform '\\n' to '\n'
+            # and then ord() to convert it to int
             return str(ord(eval(c)))
         else:
-            # Other character
+            # Convert to int using ord()
             return str(ord(c[1:-1]))
 
     is_char = lambda c: tok[0] == "'" and tok[-1] == "'"
 
     for line in lines:
-        # Replace spaces before splitting
+        # Convert spaces before splitting!
+        # Otherwise line.split() will result in a big mess
         line = line.replace("' '", str(ord(' ')))
         tokens = line.split()
+
         # Process chars
         tokens = [char_to_int(tok) if is_char(tok) else tok for tok in tokens]
         yield ' '.join(tokens)
@@ -358,9 +425,8 @@ def assembler_to_hex(assembler_code, preprocessor_only=False):
     # Prepare token stream
     hexcode = []
     lines = assembler_code.splitlines()
-    # print 'Tokenized input:', tokens
 
-    # Run preprocessors
+    # Execute preprocessors
     preprocessors = (preprocessor_include, preprocessor_comments,
                      preprocessor_constants, preprocessor_labels,
                      preprocessor_chars)
@@ -374,29 +440,29 @@ def assembler_to_hex(assembler_code, preprocessor_only=False):
     for line in lines:
         iterator = iter(line.split())
         for token in iterator:
-            # print 'Processing token:', token
+            debug('Processing token:', token)
 
             # Lookup token in instructions list
             instruction = instructions[token.upper()]
-            # print 'Instruction:', instruction
+            debug('Instruction:', instruction)
 
             # Get arguments, look up arg count from first instruction
             num_args = len(instruction.values()[0])
-            # print 'Expected number of arguments:', num_args
+            debug('Expected number of arguments:', num_args)
 
             arg_list = [iterator.next() for _ in range(num_args)]
             arg_types = [get_arg_type(arg[0]) for arg in arg_list]
 
-            # print 'Arguments:', arg_list
-            # print 'Argument types:', arg_types
+            debug('Arguments:', arg_list)
+            debug('Argument types:', arg_types)
 
             # Find matching instruction
             opcode = None
-            for _opcode in instruction:
+            for opc in instruction:
                 # Check if the list of type arguments matches
-                opcode_args = instruction[_opcode]
+                opcode_args = instruction[opc]
                 if opcode_args == tuple(arg_types):
-                    opcode = _opcode
+                    opcode = opc
 
             if opcode is None:
                 raise AssemblerSyntaxError(
@@ -408,11 +474,7 @@ def assembler_to_hex(assembler_code, preprocessor_only=False):
             # 1. Strip '[ ]'
             arg_list = [arg.strip('[]') for arg in arg_list]
             # 3. Make ints
-            arg_list = [int(arg) for arg in arg_list]
-            # 4. Make hex
-            # Use % operator, because using hex() would result in 0x1 instead
-            # of 0x01
-            arg_list = ['0x' + ('%02X' % arg).upper() for arg in arg_list]
+            arg_list = [hex(int(arg)) for arg in arg_list]
 
             # Create opcode string and store it
             opcode += ' ' + ' '.join(arg_list)
@@ -420,7 +482,7 @@ def assembler_to_hex(assembler_code, preprocessor_only=False):
 
             hexcode.append(opcode)
 
-    return '\n'.join(hexcode)
+    return ' '.join(hexcode)
 
 if __name__ == '__main__':
     import sys
