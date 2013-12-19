@@ -206,10 +206,23 @@ def neighborhood(iterable):
 def preprocessor_include(lines):
     """
     Process include directives.
+
+    Example:
+
+    a.asm:
+        APRINT '!'
+
+    b.asm:
+        #include a.asm
+        HALT
+
+    Results in:
+
+        APRINT '!'
+        HALT
     """
     # TODO: What about nested includes?
     # TODO: What about recursive includes?
-    # TODO: Add syntax example
     lines = list(lines)
     included = set()  # Files we already included
 
@@ -232,8 +245,16 @@ def preprocessor_include(lines):
 def preprocessor_comments(lines, separator=';'):
     """
     Remove all comments from the source code.
+
+    Example:
+
+        ; Some comment
+        HALT  ; Stop the execution
+
+    Results in:
+
+        HALT
     """
-    # TODO: Add syntax example
     for line in lines:
         line = line.strip()
 
@@ -251,9 +272,17 @@ def preprocessor_comments(lines, separator=';'):
 def preprocessor_constants(lines):
     """
     Replaces constants usage with the defined vaule.
+
+    Example:
+
+        $const = 5
+        MOV [2] $const
+
+    Results in:
+
+        MOV [2] 5
     """
     # TODO: Simplify
-    # TODO: Add syntax example
 
     constants = {}
     auto_mem = 0
@@ -315,6 +344,10 @@ def preprocessor_labels(lines):
 
         label:
         GOTO :label
+
+    Results in:
+
+        GOTO 0
 
     """
     lines = list(lines)
@@ -490,7 +523,10 @@ if __name__ == '__main__':
     filename = sys.argv[1] if not pp_only else sys.argv[2]
 
     try:
-        print assembler_to_hex(open(filename).read(), preprocessor_only=pp_only)
+        print assembler_to_hex(
+            open(filename).read(),
+            preprocessor_only=pp_only
+        )
     except Warning as w:
         print w
     except AssemblerException as e:
