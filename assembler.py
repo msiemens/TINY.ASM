@@ -4,7 +4,9 @@ Tiny-ASM preprocessor and assembler.
 Supported instructions described at http://redd.it/1kqxz9.
 """
 
+from helpers import neighborhood, flatten
 from virtualmachine import MEMORY_SIZE
+
 # Create type enum, fallback to ints
 try:
     from enum import Enum
@@ -189,20 +191,6 @@ instructions = {
 # THE PREPROCESSORS
 ###############################################################################
 
-def neighborhood(iterable):
-    """
-    Yield the list as (item, next item).
-    """
-    iterator = iter(iterable)
-    item = iterator.next()  # throws StopIteration if empty.
-
-    for _next in iterator:
-        yield (item, _next)
-        item = _next
-
-    yield (item, None)
-
-
 def preprocessor_include(lines):
     """
     Process include directives.
@@ -351,13 +339,9 @@ def preprocessor_labels(lines):
 
     """
     lines = list(lines)
-    tokens = []
+    # Split lines to one big list of tokens
+    tokens = flatten(line.split() for line in lines)
     labels = {}
-
-    # Split up lines to one big list of tokens
-    # TODO: Shorten to list comprehension
-    for line in lines:
-        tokens.extend(line.split())
 
     # Pass 1: Collect labels
     for index, token in enumerate(tokens):
@@ -395,6 +379,7 @@ def preprocessor_labels(lines):
             else:
                 tokens.append(token)
 
+        # If there any tokens left, yield them
         if tokens:
             debug('Labels:', labels)
             yield ' '.join(tokens)
