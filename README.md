@@ -17,7 +17,7 @@ Your goal will be to write an assembler for Tiny: though you don't need to simul
 
 > Another Monte Carlo method for computing π is to draw a circle inscribed in a square, and randomly place dots in the square. The ratio of dots inside the circle to the total number of dots will approximately equal π/4. <small>From [Wikipedia](http://en.wikipedia.org/wiki/Pi#Geometry_and_trigonometry)</small>
 
-Because of the random values and the word size of 8 bit, the result will have a very low precision and vary between runs. In addition, due to the lack of float point arithmetics, `pi.asm` will only output the equation to get π (e.g. `78/100*4`). I'm still working on implementing 16bit float point arithmetics for Tiny, so `pi.asm` might output the actual result.
+Because of the random values and the word size of 8 bit, the result will have a very low precision and vary between runs. In addition, due to the lack of float point arithmetics, `pi.asm` will only output the equation to get π (e.g. `78/100*4`). ~~I'm still working on implementing 16bit float point arithmetics for Tiny, so `pi.asm` might output the actual result.~~ I wanted to implement 16bit float point arithmetics for Tiny, but the 8 bit word size limits me in the programm size as the return address would start overflowing.
 
 ## Syntax Additions
 **Comments**
