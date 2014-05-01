@@ -3,55 +3,19 @@
 ###############################################################################
 
 import sys
-import random
-from cStringIO import StringIO
+from io import StringIO
 from timeit import default_timer as timer
 
-try:
-    from enum import Enum
-except ImportError:
-    ADDRESS = 0
-    LITERAL = 1
-else:
-    args = Enum('args', 'address literal')
-    ADDRESS = args.address
-    LITERAL = args.literal
+import colorama
+
+import assembler
+from exc import VirtualRuntimeError, MissingHaltError
+from opcodes import *
+from config import MEMORY_SIZE, MAX_INT, DEBUG, TESTING
+from helpers import get_ordered_annotations, fatal_error
 
 
-################################################################################
-# EXCEPTIONS
-###############################################################################
-
-class VirtualRuntimeError(Exception):
-    pass
-
-###############################################################################
-# CONSTANTS
-###############################################################################
-
-WORD_SIZE = 8
-MAX_INT = 2 ** WORD_SIZE
-MEMORY_SIZE = 2 ** WORD_SIZE
-RAND_MAX = 25
-
-# WORD_SIZE = 32
-# MAX_INT = 2 ** WORD_SIZE
-# MEMORY_SIZE = 256
-# RAND_MAX = 255
-
-
-###############################################################################
-# RUNTIME VARIABLES
-###############################################################################
-
-def init():
-    global memory, running, instr_pointer, ticks, jumping, output
-    memory = [0] * MEMORY_SIZE
-    running = True
-    instr_pointer = 0
-    ticks = 0
-    jumping = False
-    output = StringIO()
+colorama.init()
 
 
 ###############################################################################
@@ -67,158 +31,223 @@ is_address = lambda s: hasattr(s, '__getitem__') and s[0] == '['
 # Check, if the given string represents an integer literal
 is_literal = lambda s: not is_address(s)
 
-# Get the type of the argument
+# Get an argument's type
 get_arg_type = lambda t: ADDRESS if is_address(t) else LITERAL
 
-# Get the address from an address string
-get_address = lambda x: int(x[1:-1])
 
-# Get the value. Addresses will resolve to the memory content.
-get_value = lambda m: memory[get_address(m)] if is_address(m) else m
-
-
-def assert_address(x):
-    assert is_address(x), '{} is not an address!'.format(x)
-
-
-def assert_literal(x):
-    assert not is_address(x), '{} is not a literal!'.format(x)
-
-
-def mem_store(dest, arg):
-    """ Store arg in dest. """
-    memory[get_address(dest)] = to_uint(get_value(arg))
-
-
-def instr_jump(dest):
-    """ Move the instruction pointer to dest. """
-    global instr_pointer, jumping
-    # print 'JUMPING from {} to {}'.format(instr_pointer, dest)
-    instr_pointer = dest
-    jumping = True
-
-
-def halt():
-    """ Stop the execution. """
-    global running
-    # print 'HALTING'
-    running = False
+def get_annotations(instance):
+    try:
+        func = instance.__call__
+    except AttributeError:
+        return {}
+    return get_ordered_annotations(func)
 
 
 ###############################################################################
-# INSTRUCTION DEFINITIONS
+# THE VIRTUALMACHINE CLASS
 ###############################################################################
 
-def instruction_logical(op):
-    """ Calculate the new vaule using op and store in dest. """
-    def operation(dest, arg):
-        assert_address(dest)
-        result = op(get_value(dest), get_value(arg))
-        mem_store(dest, result)
+class VirtualMachine(object):
+    def __init__(self):
+        self.testing = TESTING
+        self.debug = DEBUG
 
-    return operation
+        self.tokens = None
 
-instruction_arithmetical = instruction_logical
+        self.memory = [0] * MEMORY_SIZE
+        self.running = True
+        self.instr_pointer = 0
+        self.prev_instr_pointer = 0
+        self.ticks = 0
+        self.jumping = False
+        self.output = StringIO()
 
+    #: :type: dict[str, Instruction]
+    instructions = {
+        'AND': AndInstruction,
+        'OR': OrInstruction,
+        'XOR': XorInstruction,
+        'NOT': NotInstruction,
+        'MOV': MovInstruction,
+        'RANDOM': RandomInstruction,
+        'ADD': AddInstruction,
+        'SUB': SubInstruction,
+        'JMP': JmpInstruction,
+        'JZ': JzInstruction,
+        'JEQ': JeqInstruction,
+        'JLS': JlsInstruction,
+        'JGT': JgtInstruction,
+        'HALT': HaltInstruction,
+        'APRINT': AprintInstruction,
+        'DPRINT': DprintInstruction,
+        'AREAD': lambda m: (m, ord(sys.stdin.read(1)))
+    }
 
-def instruction_jump_conditional(cmp):
-    """ Jump to x if cmp(a, b) returns True. """
-    def operation(x, a, b):
-        assert_address(a)
-        if cmp(get_value(a), get_value(b)):
-            instr_jump(get_value(x))
+    ###########################################################################
+    # SMALL HELPERS
+    ###########################################################################
 
-    return operation
+    def debug(self, msg):
+        if self.debug:
+            print(msg)
 
+    def mem_store(self, dest, arg):
+        """ Store arg in dest. """
+        self.memory[dest] = to_uint(arg)
 
-def instruction_print(a):
-    """ Print to stdout. """
-    output.write(str(a))
-    sys.stdout.write(str(a))
+    def mem_read(self, m):
+        """ Read from a memory address. """
+        return self.memory[m]
 
+    def instr_jump(self, dest):
+        """ Move the instruction pointer to dest. """
+        assert dest is not None, 'Tried to jump to None'
 
-instructions = {
-    'AND': instruction_logical(lambda a, b: a & b),
-    'OR': instruction_logical(lambda a, b: a | b),
-    'XOR': instruction_logical(lambda a, b: a ^ b),
-    'NOT': lambda a: mem_store(a, ~ a),
-    'MOV': lambda x, a: mem_store(x, get_value(a)),
-    'RANDOM': lambda a: mem_store(a, random.randint(0, RAND_MAX)),
-    'ADD': instruction_arithmetical(lambda a, b: a + b),
-    'SUB': instruction_arithmetical(lambda a, b: a - b),
-    'JMP': lambda a: instr_jump(get_value(a)),
-    'JZ': lambda x, a: instr_jump(get_value(x)) if get_value(a) == 0 else None,
-    'JEQ': instruction_jump_conditional(lambda a, b: a == b),
-    'JLS': instruction_jump_conditional(lambda a, b: a < b),
-    'JGT': instruction_jump_conditional(lambda a, b: a > b),
-    'HALT': halt,
-    'APRINT': lambda a: instruction_print(chr(int(get_value(a)))),
-    'DPRINT': lambda a: instruction_print(int(get_value(a))),
-    'AREAD': lambda m: mem_store(m, ord(sys.stdin.read(1)))
-}
+        if self.prev_instr_pointer == dest:
+            fatal_error('Stuck in infinite loop!', VirtualRuntimeError)
 
+        self.prev_instr_pointer = self.instr_pointer
 
-###############################################################################
-# MAIN LOOP
-###############################################################################
+        self.instr_pointer = dest
+        self.jumping = True
 
-def run(asm, testing=False):
-    init()
-    import assembler
-    start = timer()
-
-    global ticks, instr_pointer, jumping
-    tokens = assembler.assembler_to_hex(asm, preprocessor_only=True)
-    tokens = tokens.split()
-
-    while running:
-        if instr_pointer >= len(tokens):
-            msg = 'FATAL ERROR: Code did not terminate properly!'
-            print msg
-
-            if testing:
-                raise VirtualRuntimeError(msg)
-
-            halt()
-
-        jumping = False
-        #print 'Ticks:', ticks
-        #ctx_pre = ' '.join(tokens[instr_pointer - 5:instr_pointer])
-        #ctx_post = ' '.join(tokens[instr_pointer + 1:instr_pointer + 6])
-        #print 'Ctx:', ctx_pre, ':::', tokens[instr_pointer], ':::', ctx_post
-        #print 'Pointer:', instr_pointer
-        #print 'Memory:', memory
-        opcode = tokens[instr_pointer]
-        #print 'Instruction:', opcode
-
-        # Look up number of arguments
-        num_args = len(assembler.instructions[opcode].values()[0])
-        # print 'Number of args:', num_args
-
-        if num_args:
-            # Read arguments
-            args = [tokens[instr_pointer + i + 1] for i in range(num_args)]
-            # Transform to ints
-            args = [int(arg) if is_literal(arg) else arg for arg in args]
-            # print 'Arguments:', ' '.join(str(a) for a in args)
+    def halt(self):
+        """ Stop the execution. """
+        if self.testing:
+            self.running = False
         else:
-            args = []
+            sys.exit(1)
 
-        # Run instruction
-        instructions[opcode](*args)
+    ###########################################################################
+    # PROCESSING HELPERS
+    ###########################################################################
 
-        # Increase counters
-        ticks += 1
-        if not jumping:
-            instr_pointer += 1 + num_args
+    def process_arg(self, i, annotations, opcode):
+        """
+        Process an instruction's argument.
+        """
+        mnem = opcodes[opcode]
+        arg_type = instructions[mnem][opcode][i]
+        arg = self.tokens[self.instr_pointer + i + 1]
 
-        # print
-    # print
-    # print 'Exited after {} ticks in {:.5}s'.format(ticks, timer() - start)
+        # Transform literals to ints
+        arg = int(arg, 0)
 
-    return output.getvalue()
+        # Some instructions allow a parameter to be an address OR an literal
+        # but the implementation requires a literal. In this case, we need
+        # to pass the memory content instead of the address.
+        required_arg_type = list(annotations.values())[i]
+
+        if arg_type == ADDRESS and required_arg_type == LITERAL:
+            arg = self.mem_read(arg)
+
+        return arg
+
+    def process_return_value(self, return_type, return_value):
+        """
+        Process the return value of an instruction.
+        """
+        if return_value is not None:
+
+            # Interpret return value as jump destination
+            if return_type == ReturnValue.JUMP:
+                self.instr_jump(return_value)
+
+            # Interpret as memory pointer and content
+            elif return_type == ReturnValue.DATA:
+                dest, value = return_value
+                self.mem_store(dest, value)
+
+    ###########################################################################
+    # THE RUN METHOD
+    ###########################################################################
+
+    def run(self, asm, filename=None, preprocess=True):
+        start = timer()
+
+        # Tokenize code
+        if preprocess:
+            self.tokens = assembler.assembler_to_hex(asm, filename)
+
+        self.tokens = self.tokens.split()
+
+        # Main loop
+        while self.running:
+            self.jumping = False
+
+            # Check bounds of instr_pointer
+            if self.instr_pointer >= len(self.tokens):
+                fatal_error('Reached end of code without seeing HALT',
+                            MissingHaltError, exit_func=self.halt)
+
+            # Get current opcode
+            opcode = self.tokens[self.instr_pointer]
+            mnem = opcodes[opcode].upper()
+
+            if self.debug:
+                print('Instruction: {} ({})'.format(mnem, opcode))
+
+            # Look up instruction
+            instruction_class = self.instructions[mnem]
+            instruction = instruction_class(self)
+            instruction_spec = instructions[mnem]
+            annotations = get_annotations(instruction)
+
+            # Look up number of arguments
+            num_args = len(list(instruction_spec.values())[0])
+
+            if self.debug:
+                print('Number of args:', num_args)
+                print('Argument spec:', instruction_spec[opcode])
+
+            # Collect arguments
+            if num_args:
+                try:
+                    args = [self.process_arg(i, annotations, opcode)
+                            for i in range(num_args)]
+                except IndexError:
+                    msg = 'Unexpectedly reached EOF. Maybe an argument is ' \
+                          'missing or a messed up jump occured'
+                    fatal_error(msg, VirtualRuntimeError, exit_func=self.halt)
+            else:
+                args = []
+
+            if self.debug:
+                print('Arguments:', args)
+
+            # Run instruction
+            return_value = instruction(*args)
+
+            # Process return value
+            try:
+                return_type = annotations['return']
+            except KeyError:
+                return_type = None
+            self.process_return_value(return_type, return_value)
+
+            # Increase counters
+            self.ticks += 1
+            if not self.jumping:
+                self.prev_instr_pointer = self.instr_pointer
+                self.instr_pointer += 1  # Skip current opcode
+                self.instr_pointer += num_args  # Skip arguments
+
+            if self.debug:
+                print('Memory:', self.memory)
+                print()
+                print()
+
+        if self.debug:
+            print()
+            print('Exited after {} ticks in {:.5}s'.format(self.ticks,
+                                                           timer() - start))
+
+        return self.output.getvalue()
+
+
+def main():
+    filename = sys.argv[1]
+    VirtualMachine().run(open(filename).read(), filename)
 
 if __name__ == '__main__':
-    import sys
-    filename = sys.argv[1]
-    run(open(filename).read())
+    main()

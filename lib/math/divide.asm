@@ -6,7 +6,8 @@
 ;     Input: $arg0: dividend as int, $arg1: divisor as int
 ;    Output: $return's the arg0/arg1 as int division
 ; Algorithm: TODO
-math_divide:
+
+@start(math_divide, 2)
     MOV     $return             0       ; Reset variables
 
     math_div_loop:
@@ -18,3 +19,4 @@ math_divide:
 
     math_div_done:
     JMP     $jump_back
+@end()

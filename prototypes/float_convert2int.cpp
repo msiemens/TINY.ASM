@@ -8,9 +8,9 @@
 using namespace std;
 
 typedef unsigned short uint8;
-const int bits = 16;
-const int exponent_length = 5;
-const int mantissa_length = 10;
+const int bits = 32;
+const int exponent_length = 8;
+const int mantissa_length = 23;
 const int bias = pow(2, exponent_length - 1) - 1;
 
 

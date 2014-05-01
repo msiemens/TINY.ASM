@@ -36,9 +36,9 @@ Because of the random values and the word size of 8 bit, the result will have a 
 
     MOV $mem_addr $some_const
 
-**Includes**
+**Imports**
 
-    #include file_name.asm
+    #import file_name.asm
 
 **Char Constants**
 

@@ -15,10 +15,10 @@
 
 ;  Input: $arg0 as integer
 ; Output: $return's the integer shifted left
-binary_shift_left:
+@start(binary_shift_left, 1)
     ADD     $arg0       $arg0
     MOV     $return     $arg0
-    JMP     $jump_back
+@end()
 
 
 ; SUBROUTINE: Shift right
@@ -30,7 +30,7 @@ binary_shift_left:
 ;            to the result:
 ;            Input:  100 ← bit(3) is set, value: 4, add 4/2=2
 ;            Output: 010
-binary_shift_right:
+@start(binary_shift_right, 1)
     MOV     $return     0                       ; Initialize memory
 
     ; shift_r_bit2:
@@ -76,4 +76,4 @@ binary_shift_right:
     ADD     $return         64                  ; Add 128 / 2 = 64
 
     shift_r_return:
-    JMP     $jump_back
+@end()

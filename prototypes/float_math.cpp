@@ -114,6 +114,54 @@ uint8 highest_bit_pos(uint8 v) {
 // Multiplication of floats
 // ---------------------------------------------------------------------
 
+uint8 float_div(uint8 f1, uint8 f2) {
+    cout << endl;
+
+    uint8 res_exp = 0;
+    uint8 res_mant = 0;
+    uint8 result = 0;
+
+    uint8 exp1 = (f1 & exponent_mask) >> mantissa_length;
+    uint8 exp2 = (f2 & exponent_mask) >> mantissa_length;
+    uint8 mant1 = (f1 & mantissa_mask) | hidden_bit;
+    uint8 mant2 = (f2 & mantissa_mask) | hidden_bit;
+
+    cout << "mant1:    " << ui2b(mant1) << endl;
+    cout << "mant2:    " << ui2b(mant2) << endl;
+
+    // Substract exponents
+    res_exp = exp1 - exp2 + bias;
+
+    // Divide significants
+    mant1 <<= (mantissa_length + 1);
+    res_mant = mant1 / mant2;
+    uint8 highest_bit = highest_bit_pos(res_mant);
+
+    if (highest_bit == 11) {
+        cout << "Normalizing" << endl;
+        res_mant >>= 1;
+        res_exp -= 1;
+    }
+
+    // Shift 22bit int right to fit into 10 bit
+    // if (highest_bit == 21) {
+    //     res_exp += 1;
+    // }
+    // res_mant >>= highest_bit - 10;
+
+    res_mant &= ~hidden_bit;    // Remove hidden bit
+
+    result = (res_exp << mantissa_length) | res_mant;
+
+    cout << "res_mant: " << ui2b(res_mant) << endl;
+    cout << "res_exp:  " << (res_exp - bias) << endl;
+
+    cout << " == " /* << "Result:   " << */;
+    printf("%f", float2int(result));
+    cout << endl;
+    return result;
+}
+
 uint8 float_mul(uint8 f1, uint8 f2) {
     uint8 res_exp = 0;
     uint8 res_mant = 0;
@@ -156,8 +204,8 @@ int main(int argc, char const *argv[])
     if (argc == 3) {
         int arg1 = strtol(argv[1], NULL, 0);
         int arg2 = strtol(argv[2], NULL, 0);
-        cout << arg1 << " * " << arg2; // << endl;
-        float_mul(int2ieee754(arg1), int2ieee754(arg2));
+        cout << arg1 << " / " << arg2; // << endl;
+        float_div(int2ieee754(arg1), int2ieee754(arg2));
 
         return 0;
     }
