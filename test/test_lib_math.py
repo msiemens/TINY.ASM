@@ -20,7 +20,7 @@ def test_multiply():
     asm_path = join(dirname(dirname(__file__)), 'lib', 'math', 'multiply.asm')
     asm = template.format(arg0='{arg0}', arg1='{arg1}', call='math_multiply',
                           path=asm_path)
-    #asm += open(asm_path).read()
+    # asm += open(asm_path).read()
 
     print(asm)
 

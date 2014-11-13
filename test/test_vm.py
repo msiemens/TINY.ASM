@@ -7,6 +7,7 @@ config.TESTING = True
 
 from virtualmachine import (VirtualMachine)
 
+
 @pytest.fixture
 def vm():
     return VirtualMachine()

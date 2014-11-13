@@ -27,7 +27,8 @@ def test_shift_left():
 
 def test_shift_right():
     asm_path = join(dirname(dirname(__file__)), 'lib', 'binary', 'shift.asm')
-    asm = template.format(arg='{arg}', call='binary_shift_right', path=asm_path)
+    asm = template.format(arg='{arg}', call='binary_shift_right',
+                          path=asm_path)
 
     assert VirtualMachine().run(asm.format(arg=255)) == '127'
     assert VirtualMachine().run(asm.format(arg=2)) == '1'

@@ -2,7 +2,6 @@
 # IMPORTS
 ###############################################################################
 
-import sys
 from io import StringIO
 from timeit import default_timer as timer
 
